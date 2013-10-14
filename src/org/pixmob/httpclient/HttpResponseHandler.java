@@ -19,17 +19,14 @@ package org.pixmob.httpclient;
  * This handler is notified when an Http response is received.
  * @author Pixmob
  */
-public class HttpResponseHandler {
+public interface HttpResponseHandler {
     /**
      * The request failed to connect or read data in time.
      */
-    public void onTimeout() throws Exception {
-        throw new HttpClientException("Timeout");
-    }
+    public void onFailure(Exception e);
     
     /**
      * The request was successfully sent and a response is available.
      */
-    public void onResponse(HttpResponse response) throws Exception {
-    }
+    public void onSuccess(HttpResponse response);
 }

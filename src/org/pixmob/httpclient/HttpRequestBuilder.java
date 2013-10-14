@@ -56,7 +56,9 @@ import javax.net.ssl.TrustManager;
 import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
 
 import android.content.Context;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.util.Log;
 
 /**
  * This class is used to prepare and execute an Http request.
@@ -192,195 +194,195 @@ public final class HttpRequestBuilder {
         return this;
     }
 
-    public HttpResponse execute() throws HttpClientException {
-        HttpURLConnection conn = null;
-        UncloseableInputStream payloadStream = null;
-        try {
-            if (parameters != null && !parameters.isEmpty()) {
-                final StringBuilder buf = new StringBuilder(256);
-                if (HTTP_GET.equals(method) || HTTP_HEAD.equals(method)) {
-                    buf.append('?');
-                }
+    public void execute(){
 
-                int paramIdx = 0;
-                for (final Map.Entry<String, String> e : parameters.entrySet()) {
-                    if (paramIdx != 0) {
-                        buf.append("&");
-                    }
-                    final String name = e.getKey();
-                    final String value = e.getValue();
-                    buf.append(URLEncoder.encode(name, CONTENT_CHARSET)).append("=")
-                            .append(URLEncoder.encode(value, CONTENT_CHARSET));
-                    ++paramIdx;
-                }
+        (new AsyncTask<Void, String, HttpResponse>() {
+            @Override
+            protected HttpResponse doInBackground(Void... params) {
+                HttpURLConnection conn = null;
+                UncloseableInputStream payloadStream = null;
+                try {
+                    if (parameters != null && !parameters.isEmpty()) {
+                        final StringBuilder buf = new StringBuilder(256);
+                        if (HTTP_GET.equals(method) || HTTP_HEAD.equals(method)) {
+                            buf.append('?');
+                        }
 
-                if (!contentSet
-                        && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
-                    try {
-                        content = buf.toString().getBytes(CONTENT_CHARSET);
-                    } catch (UnsupportedEncodingException e) {
-                        // Unlikely to happen.
-                        throw new HttpClientException("Encoding error", e);
-                    }
-                } else {
-                    uri += buf;
-                }
-            }
+                        int paramIdx = 0;
+                        for (final Map.Entry<String, String> e : parameters.entrySet()) {
+                            if (paramIdx != 0) {
+                                buf.append("&");
+                            }
+                            final String name = e.getKey();
+                            final String value = e.getValue();
+                            buf.append(URLEncoder.encode(name, CONTENT_CHARSET)).append("=")
+                                    .append(URLEncoder.encode(value, CONTENT_CHARSET));
+                            ++paramIdx;
+                        }
 
-            conn = (HttpURLConnection) new URL(uri).openConnection();
-            conn.setConnectTimeout(hc.getConnectTimeout());
-            conn.setReadTimeout(hc.getReadTimeout());
-            conn.setAllowUserInteraction(false);
-            conn.setInstanceFollowRedirects(false);
-            conn.setRequestMethod(method);
-            conn.setUseCaches(false);
-            conn.setDoInput(true);
-
-            if (headers != null && !headers.isEmpty()) {
-                for (final Map.Entry<String, List<String>> e : headers.entrySet()) {
-                    final List<String> values = e.getValue();
-                    if (values != null) {
-                        final String name = e.getKey();
-                        for (final String value : values) {
-                            conn.addRequestProperty(name, value);
+                        if (!contentSet
+                                && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
+                            try {
+                                content = buf.toString().getBytes(CONTENT_CHARSET);
+                            } catch (UnsupportedEncodingException e) {
+                                // Unlikely to happen.
+                                handleError("Encoding error", e);
+                            }
+                        } else {
+                            uri += buf;
                         }
                     }
-                }
-            }
 
-            if (cookies != null && !cookies.isEmpty() || hc.getInMemoryCookies() != null
-                    && !hc.getInMemoryCookies().isEmpty()) {
-                final StringBuilder cookieHeaderValue = new StringBuilder(256);
-                prepareCookieHeader(cookies, cookieHeaderValue);
-                prepareCookieHeader(hc.getInMemoryCookies(), cookieHeaderValue);
-                conn.setRequestProperty("Cookie", cookieHeaderValue.toString());
-            }
+                    conn = (HttpURLConnection) new URL(uri).openConnection();
+                    conn.setConnectTimeout(hc.getConnectTimeout());
+                    conn.setReadTimeout(hc.getReadTimeout());
+                    conn.setAllowUserInteraction(false);
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setRequestMethod(method);
+                    conn.setUseCaches(false);
+                    conn.setDoInput(true);
 
-            final String userAgent = hc.getUserAgent();
-            if (userAgent != null) {
-                conn.setRequestProperty("User-Agent", userAgent);
-            }
-
-            conn.setRequestProperty("Connection", "close");
-            conn.setRequestProperty("Location", uri);
-            conn.setRequestProperty("Referrer", uri);
-            conn.setRequestProperty("Accept-Encoding", "gzip,deflate");
-            conn.setRequestProperty("Accept-Charset", CONTENT_CHARSET);
-
-            if (conn instanceof HttpsURLConnection) {
-                setupSecureConnection(hc.getContext(), (HttpsURLConnection) conn);
-            }
-
-            if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
-                if (content != null) {
-                    conn.setDoOutput(true);
-                    if (!contentSet) {
-                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
-                                + CONTENT_CHARSET);
-                    } else if (contentType != null) {
-                        conn.setRequestProperty("Content-Type", contentType);
-                    }
-                    conn.setFixedLengthStreamingMode(content.length);
-
-                    final OutputStream out = conn.getOutputStream();
-                    out.write(content);
-                    out.flush();
-                } else {
-                    conn.setFixedLengthStreamingMode(0);
-                }
-            }
-
-            for (final HttpRequestHandler connHandler : reqHandlers) {
-                try {
-                    connHandler.onRequest(conn);
-                } catch (HttpClientException e) {
-                    throw e;
-                } catch (Exception e) {
-                    throw new HttpClientException("Failed to prepare request to " + uri, e);
-                }
-            }
-
-            conn.connect();
-
-            final int statusCode = conn.getResponseCode();
-            if (statusCode == -1) {
-                throw new HttpClientException("Invalid response from " + uri);
-            }
-            if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode)) {
-                throw new HttpClientException("Expected status code " + expectedStatusCodes + ", got "
-                        + statusCode);
-            } else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
-                throw new HttpClientException("Expected status code 2xx, got " + statusCode);
-            }
-
-            final Map<String, List<String>> headerFields = conn.getHeaderFields();
-            final Map<String, String> inMemoryCookies = hc.getInMemoryCookies();
-            if (headerFields != null) {
-                final List<String> newCookies = headerFields.get("Set-Cookie");
-                if (newCookies != null) {
-                    for (final String newCookie : newCookies) {
-                        final String rawCookie = newCookie.split(";", 2)[0];
-                        final int i = rawCookie.indexOf('=');
-                        final String name = rawCookie.substring(0, i);
-                        final String value = rawCookie.substring(i + 1);
-                        inMemoryCookies.put(name, value);
-                    }
-                }
-            }
-
-            if (isStatusCodeError(statusCode)) {
-                // Got an error: cannot read input.
-                payloadStream = new UncloseableInputStream(getErrorStream(conn));
-            } else {
-                payloadStream = new UncloseableInputStream(getInputStream(conn));
-            }
-            final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
-                    headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
-            if (handler != null) {
-                try {
-                    handler.onResponse(resp);
-                } catch (HttpClientException e) {
-                    throw e;
-                } catch (Exception e) {
-                    throw new HttpClientException("Error in response handler", e);
-                }
-            } else {
-                final File temp = File.createTempFile("httpclient-req-", ".cache", hc.getContext().getCacheDir());
-                resp.preload(temp);
-                temp.delete();
-            }
-            return resp;
-        } catch (SocketTimeoutException e) {
-            if (handler != null) {
-                try {
-                    handler.onTimeout();
-                    return null;
-                } catch (HttpClientException e2) {
-                    throw e2;
-                } catch (Exception e2) {
-                    throw new HttpClientException("Error in response handler", e2);
-                }
-            } else {
-                throw new HttpClientException("Response timeout from " + uri, e);
-            }
-        } catch (IOException e) {
-            throw new HttpClientException("Connection failed to " + uri, e);
-        } finally {
-            if (conn != null) {
-                if (payloadStream != null) {
-                    // Fully read Http response:
-                    // http://docs.oracle.com/javase/6/docs/technotes/guides/net/http-keepalive.html
-                    try {
-                        while (payloadStream.read(buffer) != -1) {
-                            ;
+                    if (headers != null && !headers.isEmpty()) {
+                        for (final Map.Entry<String, List<String>> e : headers.entrySet()) {
+                            final List<String> values = e.getValue();
+                            if (values != null) {
+                                final String name = e.getKey();
+                                for (final String value : values) {
+                                    conn.addRequestProperty(name, value);
+                                }
+                            }
                         }
-                    } catch (IOException ignore) {
                     }
-                    payloadStream.forceClose();
+
+                    if (cookies != null && !cookies.isEmpty() || hc.getInMemoryCookies() != null
+                            && !hc.getInMemoryCookies().isEmpty()) {
+                        final StringBuilder cookieHeaderValue = new StringBuilder(256);
+                        prepareCookieHeader(cookies, cookieHeaderValue);
+                        prepareCookieHeader(hc.getInMemoryCookies(), cookieHeaderValue);
+                        conn.setRequestProperty("Cookie", cookieHeaderValue.toString());
+                    }
+
+                    final String userAgent = hc.getUserAgent();
+                    if (userAgent != null) {
+                        conn.setRequestProperty("User-Agent", userAgent);
+                    }
+
+                    conn.setRequestProperty("Connection", "close");
+                    conn.setRequestProperty("Location", uri);
+                    conn.setRequestProperty("Referrer", uri);
+                    conn.setRequestProperty("Accept-Encoding", "gzip,deflate");
+                    conn.setRequestProperty("Accept-Charset", CONTENT_CHARSET);
+
+                    if (conn instanceof HttpsURLConnection) {
+                        setupSecureConnection(hc.getContext(), (HttpsURLConnection) conn);
+                    }
+
+                    if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
+                        if (content != null) {
+                            conn.setDoOutput(true);
+                            if (!contentSet) {
+                                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
+                                        + CONTENT_CHARSET);
+                            } else if (contentType != null) {
+                                conn.setRequestProperty("Content-Type", contentType);
+                            }
+                            conn.setFixedLengthStreamingMode(content.length);
+
+                            final OutputStream out = conn.getOutputStream();
+                            out.write(content);
+                            out.flush();
+                        } else {
+                            conn.setFixedLengthStreamingMode(0);
+                        }
+                    }
+
+                    for (final HttpRequestHandler connHandler : reqHandlers) {
+                        try {
+                            connHandler.onRequest(conn);
+                        }
+                        catch (Exception e) {
+                            handleError("Failed to prepare request to " + uri);
+                        }
+                    }
+
+                    conn.connect();
+
+                    final int statusCode = conn.getResponseCode();
+                    if (statusCode == -1) {
+                        handleError("Invalid response from " + uri);
+                    }
+                    if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode))
+                    {
+                        handleError("Expected status code " + expectedStatusCodes + ", got "+ statusCode);
+                    }
+                    else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
+                        handleError("Expected status code 2xx, got " + statusCode);
+                    }
+
+                    final Map<String, List<String>> headerFields = conn.getHeaderFields();
+                    final Map<String, String> inMemoryCookies = hc.getInMemoryCookies();
+                    if (headerFields != null) {
+                        final List<String> newCookies = headerFields.get("Set-Cookie");
+                        if (newCookies != null) {
+                            for (final String newCookie : newCookies) {
+                                final String rawCookie = newCookie.split(";", 2)[0];
+                                final int i = rawCookie.indexOf('=');
+                                final String name = rawCookie.substring(0, i);
+                                final String value = rawCookie.substring(i + 1);
+                                inMemoryCookies.put(name, value);
+                            }
+                        }
+                    }
+
+                    if (isStatusCodeError(statusCode)) {
+                        // Got an error: cannot read input.
+                        payloadStream = new UncloseableInputStream(getErrorStream(conn));
+                    } else {
+                        payloadStream = new UncloseableInputStream(getInputStream(conn));
+                    }
+                    final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
+                            headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
+                    return resp;
+                } catch (SocketTimeoutException e) {
+                    handleError("Response timeout from " + uri, e);
+                } catch (IOException e) {
+                    handleError("Connection failed to " + uri, e);
+                } finally {
+                    if (conn != null) {
+                        if (payloadStream != null) {
+                            // Fully read Http response:
+                            // http://docs.oracle.com/javase/6/docs/technotes/guides/net/http-keepalive.html
+                            try {
+                                while (payloadStream.read(buffer) != -1) {
+                                    ;
+                                }
+                            }
+                            catch (IOException ignore) {
+                            }
+                            payloadStream.forceClose();
+                        }
+                        conn.disconnect();
+                    }
                 }
-                conn.disconnect();
+                return null;
             }
-        }
+
+            @Override
+            protected void onPostExecute(HttpResponse response) {
+                if (handler != null) {
+                    handler.onSuccess(response);
+                } else {
+                    try {
+                        final File temp = File.createTempFile("httpclient-req-", ".cache", hc.getContext().getCacheDir());
+                        response.preload(temp);
+                        temp.delete();
+                    }
+                    catch (IOException e) {
+                        handleError("Connection failed to " + uri, e);
+                    }
+                }
+            }
+        }).execute();
     }
 
     private static boolean isStatusCodeError(int sc) {
@@ -552,5 +554,24 @@ public final class HttpRequestBuilder {
         }
 
         conn.setHostnameVerifier(new BrowserCompatHostnameVerifier());
+    }
+
+    private void handleError(String errorMsg) {
+        if (handler != null) {
+            handler.onFailure(new HttpClientException(errorMsg));
+        }
+        else {
+            Log.d("HttpClient", errorMsg);
+
+        }
+    }
+
+    private void handleError(String errorMsg, Throwable e) {
+        if (handler != null) {
+            handler.onFailure(new HttpClientException(errorMsg, e));
+        }
+        else {
+            Log.d("HttpClient", errorMsg, e);
+        }
     }
 }

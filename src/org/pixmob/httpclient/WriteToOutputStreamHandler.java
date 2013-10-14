@@ -15,6 +15,8 @@
  */
 package org.pixmob.httpclient;
 
+import android.util.Log;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,7 +26,7 @@ import java.io.OutputStream;
  * {@link OutputStream} instance.
  * @author Pixmob
  */
-class WriteToOutputStreamHandler extends HttpResponseHandler {
+class WriteToOutputStreamHandler implements HttpResponseHandler {
     private final OutputStream out;
 
     public WriteToOutputStreamHandler(final OutputStream out) {
@@ -35,7 +37,7 @@ class WriteToOutputStreamHandler extends HttpResponseHandler {
     }
 
     @Override
-    public void onResponse(HttpResponse response) throws HttpClientException {
+    public void onSuccess(HttpResponse response){
         InputStream in = null;
         try {
             in = response.getPayload();
@@ -45,9 +47,14 @@ class WriteToOutputStreamHandler extends HttpResponseHandler {
                 out.write(buf, 0, bytesRead);
             }
         } catch (IOException e) {
-            throw new HttpClientException("Cannot write Http response to output stream", e);
+            onFailure(new HttpClientException("Cannot write Http response to output stream", e));
         } finally {
             IOUtils.close(out);
         }
+    }
+
+    @Override
+    public void onFailure(Exception e) {
+        Log.e("HttpClient", e.toString());
     }
 }
