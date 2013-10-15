@@ -8,8 +8,8 @@ buildscript {
 }
 apply plugin: 'android-library'
 
-dependencies {
-    compile fileTree(dir: 'libs', include: '*.jar')
+repositories {
+    mavenCentral()
 }
 
 android {
@@ -44,4 +44,8 @@ android {
         debug.setRoot('build-types/debug')
         release.setRoot('build-types/release')
     }
+}
+
+dependencies {
+    compile 'com.android.support:support-v13:13.0.0'
 }
