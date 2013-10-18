@@ -15,6 +15,8 @@
  */
 package org.pixmob.httpclient;
 
+import android.os.Build;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -25,8 +27,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import android.os.Build;
 
 /**
  * When the Http server receives a request from a client, the Http response is

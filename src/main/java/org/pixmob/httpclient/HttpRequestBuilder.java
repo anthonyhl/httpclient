@@ -15,11 +15,12 @@
  */
 package org.pixmob.httpclient;
 
-import static org.pixmob.httpclient.Constants.HTTP_DELETE;
-import static org.pixmob.httpclient.Constants.HTTP_GET;
-import static org.pixmob.httpclient.Constants.HTTP_HEAD;
-import static org.pixmob.httpclient.Constants.HTTP_POST;
-import static org.pixmob.httpclient.Constants.HTTP_PUT;
+import android.content.Context;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.util.Log;
+
+import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -53,12 +54,11 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
-import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
-
-import android.content.Context;
-import android.os.AsyncTask;
-import android.os.Build;
-import android.util.Log;
+import static org.pixmob.httpclient.Constants.HTTP_DELETE;
+import static org.pixmob.httpclient.Constants.HTTP_GET;
+import static org.pixmob.httpclient.Constants.HTTP_HEAD;
+import static org.pixmob.httpclient.Constants.HTTP_POST;
+import static org.pixmob.httpclient.Constants.HTTP_PUT;
 
 /**
  * This class is used to prepare and execute an Http request.
@@ -197,6 +197,8 @@ public final class HttpRequestBuilder {
     public void execute(){
 
         (new AsyncTask<Void, String, HttpResponse>() {
+            private StringBuilder responseDataBuffer;
+
             @Override
             protected HttpResponse doInBackground(Void... params) {
                 HttpURLConnection conn = null;
@@ -342,10 +344,14 @@ public final class HttpRequestBuilder {
                     }
                     final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
                             headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
+                    responseDataBuffer = new StringBuilder();
+                    resp.read(responseDataBuffer);
                     return resp;
                 } catch (SocketTimeoutException e) {
                     handleError("Response timeout from " + uri, e);
                 } catch (IOException e) {
+                    Log.e("IXL", "IOException", e);
+                    e.printStackTrace();
                     handleError("Connection failed to " + uri, e);
                 } finally {
                     if (conn != null) {
@@ -370,7 +376,7 @@ public final class HttpRequestBuilder {
             @Override
             protected void onPostExecute(HttpResponse response) {
                 if (handler != null) {
-                    handler.onSuccess(response);
+                    handler.onSuccess(response, responseDataBuffer.toString());
                 } else {
                     try {
                         final File temp = File.createTempFile("httpclient-req-", ".cache", hc.getContext().getCacheDir());
@@ -380,6 +386,25 @@ public final class HttpRequestBuilder {
                     catch (IOException e) {
                         handleError("Connection failed to " + uri, e);
                     }
+                }
+            }
+
+            private void handleError(String errorMsg) {
+                if (handler != null) {
+                    handler.onFailure(new HttpClientException(errorMsg));
+                }
+                else {
+                    Log.d("HttpClient", errorMsg);
+
+                }
+            }
+
+            private void handleError(String errorMsg, Throwable e) {
+                if (handler != null) {
+                    handler.onFailure(new HttpClientException(errorMsg, e));
+                }
+                else {
+                    Log.d("HttpClient", errorMsg, e);
                 }
             }
         }).execute();
@@ -554,24 +579,5 @@ public final class HttpRequestBuilder {
         }
 
         conn.setHostnameVerifier(new BrowserCompatHostnameVerifier());
-    }
-
-    private void handleError(String errorMsg) {
-        if (handler != null) {
-            handler.onFailure(new HttpClientException(errorMsg));
-        }
-        else {
-            Log.d("HttpClient", errorMsg);
-
-        }
-    }
-
-    private void handleError(String errorMsg, Throwable e) {
-        if (handler != null) {
-            handler.onFailure(new HttpClientException(errorMsg, e));
-        }
-        else {
-            Log.d("HttpClient", errorMsg, e);
-        }
     }
 }

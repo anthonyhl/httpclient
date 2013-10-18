@@ -37,7 +37,7 @@ class WriteToOutputStreamHandler implements HttpResponseHandler {
     }
 
     @Override
-    public void onSuccess(HttpResponse response){
+    public void onSuccess(HttpResponse response, String data){
         InputStream in = null;
         try {
             in = response.getPayload();

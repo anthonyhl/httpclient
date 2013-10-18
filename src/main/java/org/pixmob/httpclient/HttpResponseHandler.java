@@ -20,13 +20,14 @@ package org.pixmob.httpclient;
  * @author Pixmob
  */
 public interface HttpResponseHandler {
+
+    /**
+     * The request was successfully sent and a response is available.
+     */
+    public void onSuccess(HttpResponse response, String result);
+
     /**
      * The request failed to connect or read data in time.
      */
     public void onFailure(Exception e);
-    
-    /**
-     * The request was successfully sent and a response is available.
-     */
-    public void onSuccess(HttpResponse response);
 }

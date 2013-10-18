@@ -15,8 +15,6 @@
  */
 package org.pixmob.httpclient;
 
-import java.io.IOException;
-
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.AccountManagerFuture;
@@ -27,6 +25,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+
+import java.io.IOException;
 
 /**
  * Abstract Http authenticator using {@link AccountManager} to get

@@ -15,23 +15,25 @@
  */
 package org.pixmob.httpclient;
 
+import android.content.Context;
+import android.os.Build;
+
+import com.google.inject.Inject;
+
+import java.util.HashMap;
+import java.util.Map;
+
 import static org.pixmob.httpclient.Constants.HTTP_DELETE;
 import static org.pixmob.httpclient.Constants.HTTP_GET;
 import static org.pixmob.httpclient.Constants.HTTP_HEAD;
 import static org.pixmob.httpclient.Constants.HTTP_POST;
 import static org.pixmob.httpclient.Constants.HTTP_PUT;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import android.content.Context;
-import android.os.Build;
-
 /**
  * The Http client is responsible for sending Http requests.
  * @author Pixmob
  */
-public final class HttpClient {
+public class HttpClient {
     static {
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.FROYO) {
             // Disable connection pooling before Froyo:
