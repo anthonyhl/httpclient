@@ -25,6 +25,18 @@ Using PHC will make your code easier to understand, while leveraging the Android
 Usage
 -----
 
+In a Maven project's pom.xml file:
+
+```xml   
+<dependency>
+    <groupId>org.pixmob.httpclient</groupId>
+    <artifactId>httpclient</artifactId>
+    <version>1.0</version>
+    <type>apklib</type>
+    <scope>compile</scope>
+</dependency>
+```
+
 Making Http requests is easy:
 
     HttpClient hc = new HttpClient();
