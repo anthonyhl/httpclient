@@ -1,5 +1,29 @@
+syntax: glob
+*~
+*.apk
+*.ap_
+*.dex
+*.class
+*.swp
+*.out
+*.log
+*.bak
+*.orig
+*.classpath
+*.project
+*.settings
+*.directory
+*.externalToolBuilders
+*.factorypath
 local.properties
-bin
-gen
-
+maven-eclipse.xml
+.apt_generated/*
+gen/*
+target/*
+bin/*
+libs/*
+tmp/*
+.gradle/*
+build/*
+proguard/*
 
