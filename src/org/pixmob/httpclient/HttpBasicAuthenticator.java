@@ -21,6 +21,7 @@ import java.net.HttpURLConnection;
 /**
  * This {@link HttpRequestHandler} implementation adds Http Basic Authentication
  * to requests.
+ * 
  * @author Pixmob
  */
 public class HttpBasicAuthenticator extends HttpRequestHandler {
@@ -47,7 +48,7 @@ public class HttpBasicAuthenticator extends HttpRequestHandler {
         // because this class is not available in Eclair.
 
         final String authToken = Base64.encodeToString(rawAuthTokenBytes, Base64.DEFAULT);
-        authHeaderValue = "Basic " + authToken;
+        authHeaderValue = ("Basic " + authToken).replaceAll(System.getProperty("line.separator", ""), "");
     }
 
     @Override

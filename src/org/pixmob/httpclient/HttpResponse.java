@@ -31,6 +31,7 @@ import android.os.Build;
 /**
  * When the Http server receives a request from a client, the Http response is
  * sent back.
+ * 
  * @author Pixmob
  */
 public final class HttpResponse {
@@ -112,6 +113,8 @@ public final class HttpResponse {
         for (int bytesRead = 0; (bytesRead = in.read(inBuf)) != -1;) {
             out.write(inBuf, 0, bytesRead);
         }
+        out.flush();
+        out.close();
 
         payload = new FileInputStream(temp);
     }
