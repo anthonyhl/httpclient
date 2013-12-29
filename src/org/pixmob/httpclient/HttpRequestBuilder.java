@@ -60,6 +60,7 @@ import android.os.Build;
 
 /**
  * This class is used to prepare and execute an Http request.
+ * 
  * @author Pixmob
  */
 public final class HttpRequestBuilder {
@@ -109,6 +110,15 @@ public final class HttpRequestBuilder {
     public HttpRequestBuilder content(byte[] content, String contentType) {
         this.content = content;
         this.contentType = contentType;
+        if (content != null) {
+            contentSet = true;
+        }
+        return this;
+    }
+
+    public HttpRequestBuilder noContent() {
+        content = new byte[] {};
+        contentType = "text/plain";
         if (content != null) {
             contentSet = true;
         }
@@ -214,8 +224,7 @@ public final class HttpRequestBuilder {
                     ++paramIdx;
                 }
 
-                if (!contentSet
-                        && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
+                if (!contentSet && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
                     try {
                         content = buf.toString().getBytes(CONTENT_CHARSET);
                     } catch (UnsupportedEncodingException e) {
@@ -271,25 +280,6 @@ public final class HttpRequestBuilder {
                 setupSecureConnection(hc.getContext(), (HttpsURLConnection) conn);
             }
 
-            if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
-                if (content != null) {
-                    conn.setDoOutput(true);
-                    if (!contentSet) {
-                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
-                                + CONTENT_CHARSET);
-                    } else if (contentType != null) {
-                        conn.setRequestProperty("Content-Type", contentType);
-                    }
-                    conn.setFixedLengthStreamingMode(content.length);
-
-                    final OutputStream out = conn.getOutputStream();
-                    out.write(content);
-                    out.flush();
-                } else {
-                    conn.setFixedLengthStreamingMode(0);
-                }
-            }
-
             for (final HttpRequestHandler connHandler : reqHandlers) {
                 try {
                     connHandler.onRequest(conn);
@@ -300,6 +290,27 @@ public final class HttpRequestBuilder {
                 }
             }
 
+            // It seems that when writing content starts the connection
+            if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
+
+                if (content == null) {
+                    noContent();
+                }
+
+                conn.setDoOutput(true);
+                if (!contentSet) {
+                    conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
+                            + CONTENT_CHARSET);
+                } else if (contentType != null) {
+                    conn.setRequestProperty("Content-Type", contentType);
+                }
+                conn.setFixedLengthStreamingMode(content.length);
+
+                final OutputStream out = conn.getOutputStream();
+                out.write(content);
+                out.flush();
+            }
+
             conn.connect();
 
             final int statusCode = conn.getResponseCode();
@@ -307,8 +318,7 @@ public final class HttpRequestBuilder {
                 throw new HttpClientException("Invalid response from " + uri);
             }
             if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode)) {
-                throw new HttpClientException("Expected status code " + expectedStatusCodes + ", got "
-                        + statusCode);
+                throw new HttpClientException("Expected status code " + expectedStatusCodes + ", got " + statusCode);
             } else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
                 throw new HttpClientException("Expected status code 2xx, got " + statusCode);
             }
@@ -334,8 +344,8 @@ public final class HttpRequestBuilder {
             } else {
                 payloadStream = new UncloseableInputStream(getInputStream(conn));
             }
-            final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
-                    headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
+            final HttpResponse resp = new HttpResponse(statusCode, payloadStream, headerFields == null ? NO_HEADERS
+                    : headerFields, inMemoryCookies);
             if (handler != null) {
                 try {
                     handler.onResponse(resp);
@@ -515,8 +525,8 @@ public final class HttpRequestBuilder {
                 }
 
                 @Override
-                public Socket createSocket(InetAddress address, int port, InetAddress localAddress,
-                        int localPort) throws IOException {
+                public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
+                        throws IOException {
                     return delegate.createSocket(address, port, localAddress, localPort);
                 }
 
@@ -530,8 +540,7 @@ public final class HttpRequestBuilder {
                 }
 
                 @Override
-                public Socket createSocket(Socket s, String host, int port, boolean autoClose)
-                        throws IOException {
+                public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
                     injectHostname(s.getInetAddress(), host);
                     return delegate.createSocket(s, host, port, autoClose);
                 }
