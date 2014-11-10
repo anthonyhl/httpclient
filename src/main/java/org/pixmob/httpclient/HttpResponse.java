@@ -32,6 +32,7 @@ import java.util.Map;
 /**
  * When the Http server receives a request from a client, the Http response is
  * sent back.
+ * 
  * @author Pixmob
  */
 public final class HttpResponse {
@@ -53,6 +54,10 @@ public final class HttpResponse {
             final Map<String, List<String>> newHeaders = new HashMap<String, List<String>>(rawHeaders.size());
             for (final Map.Entry<String, List<String>> e : rawHeaders.entrySet()) {
                 final String key = e.getKey();
+                if (key == null) { // Response Code: 204 (No Content)
+                    newHeaders.put(null, e.getValue());
+                    continue;
+                }
                 final int keyLen = key.length();
                 final StringBuilder newKey = new StringBuilder(keyLen);
                 for (int i = 0; i < keyLen; ++i) {
@@ -118,6 +123,8 @@ public final class HttpResponse {
             out.close();
             in.close();
         }
+        out.flush();
+        out.close();
 
         payload = new FileInputStream(temp);
     }

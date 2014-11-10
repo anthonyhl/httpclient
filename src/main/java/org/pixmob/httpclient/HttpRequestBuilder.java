@@ -131,6 +131,16 @@ public final class HttpRequestBuilder {
         return this;
     }
 
+    public HttpRequestBuilder noContent() {
+        content = new byte[] {};
+        contentType = "text/plain";
+        if (content != null) {
+
+            contentSet = true;
+        }
+        return this;
+    }
+
     public HttpRequestBuilder cookies(Map<String, String> cookies) {
         this.cookies = cookies;
         return this;
@@ -231,7 +241,7 @@ public final class HttpRequestBuilder {
                             final String name = e.getKey();
                             final String value = e.getValue();
                             buf.append(URLEncoder.encode(name, CONTENT_CHARSET)).append("=")
-                                    .append(URLEncoder.encode(value, CONTENT_CHARSET));
+                            .append(URLEncoder.encode(value, CONTENT_CHARSET));
                             ++paramIdx;
                         }
 
@@ -444,13 +454,11 @@ public final class HttpRequestBuilder {
                     final String name = e.getKey();
                     final String value = e.getValue();
                     buf.append(URLEncoder.encode(name, CONTENT_CHARSET)).append("=")
-                            .append(URLEncoder.encode(value, CONTENT_CHARSET));
+                    .append(URLEncoder.encode(value, CONTENT_CHARSET));
                     ++paramIdx;
                 }
 
-                if (!contentSet
-                        && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT
-                                .equals(method))) {
+                if (!contentSet && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
                     try {
                         content = buf.toString().getBytes(CONTENT_CHARSET);
                     } catch (UnsupportedEncodingException e) {
@@ -555,67 +563,88 @@ public final class HttpRequestBuilder {
                 }
             }
 
-                for (final HttpRequestHandler connHandler : reqHandlers) {
-                    try {
-                        connHandler.onRequest(conn);
-                    } catch (HttpClientException e) {
-                        throw e;
-                    } catch (Exception e) {
-                        throw new HttpClientException("Failed to prepare request to " + uri, e);
+            for (final HttpRequestHandler connHandler : reqHandlers) {
+                try {
+                    connHandler.onRequest(conn);
+                } catch (HttpClientException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new HttpClientException("Failed to prepare request to " + uri, e);
+                }
+            }
+
+
+            // It seems that when writing content starts the connection
+            if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
+
+                if (content == null) {
+                    noContent();
+                }
+
+                conn.setDoOutput(true);
+                if (!contentSet) {
+                    conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
+                            + CONTENT_CHARSET);
+                } else if (contentType != null) {
+                    conn.setRequestProperty("Content-Type", contentType);
+                }
+                conn.setFixedLengthStreamingMode(content.length);
+
+                final OutputStream out = conn.getOutputStream();
+                out.write(content);
+                out.flush();
+            }
+
+            conn.connect();
+
+            final int statusCode = conn.getResponseCode();
+            if (statusCode == -1) {
+                throw new HttpClientException("Invalid response from " + uri);
+            }
+            if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode)) {
+                throw new HttpClientException("Expected status code " + expectedStatusCodes + ", got " + statusCode);
+            } else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
+                throw new HttpClientException("Expected status code 2xx, got " + statusCode);
+            }
+
+            final Map<String, List<String>> headerFields = conn.getHeaderFields();
+            final Map<String, String> inMemoryCookies = hc.getInMemoryCookies();
+            if (headerFields != null) {
+                final List<String> newCookies = headerFields.get("Set-Cookie");
+                if (newCookies != null) {
+                    for (final String newCookie : newCookies) {
+                        final String rawCookie = newCookie.split(";", 2)[0];
+                        final int i = rawCookie.indexOf('=');
+                        final String name = rawCookie.substring(0, i);
+                        final String value = rawCookie.substring(i + 1);
+                        inMemoryCookies.put(name, value);
                     }
                 }
+            }
 
-                conn.connect();
 
-                final int statusCode = conn.getResponseCode();
-                if (statusCode == -1) {
-                    throw new HttpClientException("Invalid response from " + uri);
-                }
-                
-                if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode)) {
-                    throw new HttpClientException("Expected status code " + expectedStatusCodes
-                            + ", got "
-                            + statusCode);
-                } else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
-                    throw new HttpClientException("Expected status code 2xx, got " + statusCode);
-                }
+            if (isStatusCodeError(statusCode)) {
+                // Got an error: cannot read input.
+                payloadStream = new UncloseableInputStream(getErrorStream(conn));
+            } else {
+                payloadStream = new UncloseableInputStream(getInputStream(conn));
+            }
 
-                final Map<String, List<String>> headerFields = conn.getHeaderFields();
-                final Map<String, String> inMemoryCookies = hc.getInMemoryCookies();
-                if (headerFields != null) {
-                    final List<String> newCookies = headerFields.get("Set-Cookie");
-                    if (newCookies != null) {
-                        for (final String newCookie : newCookies) {
-                            final String rawCookie = newCookie.split(";", 2)[0];
-                            final int i = rawCookie.indexOf('=');
-                            final String name = rawCookie.substring(0, i);
-                            final String value = rawCookie.substring(i + 1);
-                            inMemoryCookies.put(name, value);
-                        }
-                    }
+            final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
+                    headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
+            if (handler != null) {
+                try {
+                    handler.onSuccess(resp, conn.getResponseMessage());
+                } catch (Exception e) {
+                    throw new HttpClientException("Error in response handler", e);
                 }
-
-                if (isStatusCodeError(statusCode)) {
-                    // Got an error: cannot read input.
-                    payloadStream = new UncloseableInputStream(getErrorStream(conn));
-                } else {
-                    payloadStream = new UncloseableInputStream(getInputStream(conn));
-                }
-                final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
-                        headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
-                if (handler != null) {
-                    try {
-                        handler.onSuccess(resp, conn.getResponseMessage());
-                    } catch (Exception e) {
-                        throw new HttpClientException("Error in response handler", e);
-                    }
-                } else {
-                    final File temp = File.createTempFile("httpclient-req-", ".cache", hc
-                            .getContext().getCacheDir());
-                    resp.preload(temp);
-                    temp.delete();
-                }
-                return resp;            
+            } else {
+                final File temp = File.createTempFile("httpclient-req-", ".cache", hc
+                        .getContext().getCacheDir());
+                resp.preload(temp);
+                temp.delete();
+            }
+            return resp;            
         } catch (SocketTimeoutException e) {
             if (handler != null) {
                 try {
@@ -765,7 +794,7 @@ public final class HttpRequestBuilder {
             final SSLSocketFactory socketFactory = new SSLSocketFactory() {
                 @Override
                 public Socket createSocket(String host, int port) throws IOException,
-                        UnknownHostException {
+                UnknownHostException {
                     InetAddress addr = InetAddress.getByName(host);
                     injectHostname(addr, host);
                     return delegate.createSocket(addr, port);
@@ -779,13 +808,14 @@ public final class HttpRequestBuilder {
                 @Override
                 public Socket createSocket(String host, int port, InetAddress localHost,
                         int localPort)
-                        throws IOException, UnknownHostException {
+                                throws IOException, UnknownHostException {
                     return delegate.createSocket(host, port, localHost, localPort);
                 }
 
                 @Override
                 public Socket createSocket(InetAddress address, int port, InetAddress localAddress,
-                        int localPort) throws IOException {
+                        int localPort)
+                                throws IOException {
                     return delegate.createSocket(address, port, localAddress, localPort);
                 }
 
