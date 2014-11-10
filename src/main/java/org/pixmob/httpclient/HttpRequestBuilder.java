@@ -13,8 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.pixmob.httpclient;
 
+import static org.pixmob.httpclient.Constants.HTTP_DELETE;
+import static org.pixmob.httpclient.Constants.HTTP_GET;
+import static org.pixmob.httpclient.Constants.HTTP_HEAD;
+import static org.pixmob.httpclient.Constants.HTTP_POST;
+import static org.pixmob.httpclient.Constants.HTTP_PUT;
+
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -23,6 +31,7 @@ import android.util.Log;
 import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,14 +63,9 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
-import static org.pixmob.httpclient.Constants.HTTP_DELETE;
-import static org.pixmob.httpclient.Constants.HTTP_GET;
-import static org.pixmob.httpclient.Constants.HTTP_HEAD;
-import static org.pixmob.httpclient.Constants.HTTP_POST;
-import static org.pixmob.httpclient.Constants.HTTP_PUT;
-
 /**
  * This class is used to prepare and execute an Http request.
+ * 
  * @author Pixmob
  */
 public final class HttpRequestBuilder {
@@ -79,6 +83,7 @@ public final class HttpRequestBuilder {
     private Map<String, List<String>> headers;
     private Map<String, String> parameters;
     private byte[] content;
+    private String contentFilePath;
     private boolean contentSet;
     private String contentType;
     private HttpResponseHandler handler;
@@ -112,6 +117,15 @@ public final class HttpRequestBuilder {
         this.content = content;
         this.contentType = contentType;
         if (content != null) {
+            contentSet = true;
+        }
+        return this;
+    }
+
+    public HttpRequestBuilder contentFromFile(String filePath, String contentType) {
+        this.contentFilePath = filePath;
+        this.contentType = contentType;
+        if (contentFilePath != null) {
             contentSet = true;
         }
         return this;
@@ -194,8 +208,7 @@ public final class HttpRequestBuilder {
         return this;
     }
 
-    public void execute(){
-
+    public void executeAsync() {
         (new AsyncTask<Void, String, HttpResponse>() {
             private StringBuilder responseDataBuffer;
 
@@ -223,7 +236,8 @@ public final class HttpRequestBuilder {
                         }
 
                         if (!contentSet
-                                && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method))) {
+                                && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT
+                                        .equals(method))) {
                             try {
                                 content = buf.toString().getBytes(CONTENT_CHARSET);
                             } catch (UnsupportedEncodingException e) {
@@ -279,12 +293,14 @@ public final class HttpRequestBuilder {
                         setupSecureConnection(hc.getContext(), (HttpsURLConnection) conn);
                     }
 
-                    if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
+                    if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method)
+                            || HTTP_PUT.equals(method)) {
                         if (content != null) {
                             conn.setDoOutput(true);
                             if (!contentSet) {
-                                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset="
-                                        + CONTENT_CHARSET);
+                                conn.setRequestProperty("Content-Type",
+                                        "application/x-www-form-urlencoded; charset="
+                                                + CONTENT_CHARSET);
                             } else if (contentType != null) {
                                 conn.setRequestProperty("Content-Type", contentType);
                             }
@@ -301,8 +317,7 @@ public final class HttpRequestBuilder {
                     for (final HttpRequestHandler connHandler : reqHandlers) {
                         try {
                             connHandler.onRequest(conn);
-                        }
-                        catch (Exception e) {
+                        } catch (Exception e) {
                             handleError("Failed to prepare request to " + uri);
                         }
                     }
@@ -315,7 +330,8 @@ public final class HttpRequestBuilder {
                     }
                     if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode))
                     {
-                        handleError("Expected status code " + expectedStatusCodes + ", got "+ statusCode);
+                        handleError("Expected status code " + expectedStatusCodes + ", got "
+                                + statusCode);
                     }
                     else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
                         handleError("Expected status code 2xx, got " + statusCode);
@@ -362,8 +378,7 @@ public final class HttpRequestBuilder {
                                 while (payloadStream.read(buffer) != -1) {
                                     ;
                                 }
-                            }
-                            catch (IOException ignore) {
+                            } catch (IOException ignore) {
                             }
                             payloadStream.forceClose();
                         }
@@ -379,11 +394,11 @@ public final class HttpRequestBuilder {
                     handler.onSuccess(response, responseDataBuffer.toString());
                 } else {
                     try {
-                        final File temp = File.createTempFile("httpclient-req-", ".cache", hc.getContext().getCacheDir());
+                        final File temp = File.createTempFile("httpclient-req-", ".cache", hc
+                                .getContext().getCacheDir());
                         response.preload(temp);
                         temp.delete();
-                    }
-                    catch (IOException e) {
+                    } catch (IOException e) {
                         handleError("Connection failed to " + uri, e);
                     }
                 }
@@ -408,6 +423,228 @@ public final class HttpRequestBuilder {
                 }
             }
         }).execute();
+    }
+
+    @TargetApi(19)
+    public HttpResponse execute() throws HttpClientException {
+        HttpURLConnection conn = null;
+        UncloseableInputStream payloadStream = null;
+        try {
+            if (parameters != null && !parameters.isEmpty()) {
+                final StringBuilder buf = new StringBuilder(256);
+                if (HTTP_GET.equals(method) || HTTP_HEAD.equals(method)) {
+                    buf.append('?');
+                }
+
+                int paramIdx = 0;
+                for (final Map.Entry<String, String> e : parameters.entrySet()) {
+                    if (paramIdx != 0) {
+                        buf.append("&");
+                    }
+                    final String name = e.getKey();
+                    final String value = e.getValue();
+                    buf.append(URLEncoder.encode(name, CONTENT_CHARSET)).append("=")
+                            .append(URLEncoder.encode(value, CONTENT_CHARSET));
+                    ++paramIdx;
+                }
+
+                if (!contentSet
+                        && (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT
+                                .equals(method))) {
+                    try {
+                        content = buf.toString().getBytes(CONTENT_CHARSET);
+                    } catch (UnsupportedEncodingException e) {
+                        // Unlikely to happen.
+                        throw new HttpClientException("Encoding error", e);
+                    }
+                } else {
+                    uri += buf;
+                }
+            }
+
+            conn = (HttpURLConnection) new URL(uri).openConnection();
+            conn.setConnectTimeout(hc.getConnectTimeout());
+            conn.setReadTimeout(hc.getReadTimeout());
+            conn.setAllowUserInteraction(false);
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestMethod(method);
+            conn.setUseCaches(false);
+            conn.setDoInput(true);
+
+            if (headers != null && !headers.isEmpty()) {
+                for (final Map.Entry<String, List<String>> e : headers.entrySet()) {
+                    final List<String> values = e.getValue();
+                    if (values != null) {
+                        final String name = e.getKey();
+                        for (final String value : values) {
+                            conn.addRequestProperty(name, value);
+                        }
+                    }
+                }
+            }
+
+            if (cookies != null && !cookies.isEmpty() || hc.getInMemoryCookies() != null
+                    && !hc.getInMemoryCookies().isEmpty()) {
+                final StringBuilder cookieHeaderValue = new StringBuilder(256);
+                prepareCookieHeader(cookies, cookieHeaderValue);
+                prepareCookieHeader(hc.getInMemoryCookies(), cookieHeaderValue);
+                conn.setRequestProperty("Cookie", cookieHeaderValue.toString());
+            }
+
+            final String userAgent = hc.getUserAgent();
+            if (userAgent != null) {
+                conn.setRequestProperty("User-Agent", userAgent);
+            }
+
+            conn.setRequestProperty("Connection", "close");
+            conn.setRequestProperty("Location", uri);
+            conn.setRequestProperty("Referrer", uri);
+            conn.setRequestProperty("Accept-Encoding", "gzip,deflate");
+            conn.setRequestProperty("Accept-Charset", CONTENT_CHARSET);
+
+            if (conn instanceof HttpsURLConnection) {
+                setupSecureConnection(hc.getContext(), (HttpsURLConnection) conn);
+            }
+
+            if (HTTP_POST.equals(method) || HTTP_DELETE.equals(method) || HTTP_PUT.equals(method)) {
+                if (content != null) {
+                    conn.setDoOutput(true);
+                    if (!contentSet) {
+                        conn.setRequestProperty("Content-Type",
+                                "application/x-www-form-urlencoded; charset="
+                                        + CONTENT_CHARSET);
+                    } else if (contentType != null) {
+                        conn.setRequestProperty("Content-Type", contentType);
+                    }
+                    conn.setFixedLengthStreamingMode(content.length);
+
+                    final OutputStream out = conn.getOutputStream();
+                    out.write(content);
+                    out.flush();
+                } else if (contentFilePath != null) {
+                    conn.setDoOutput(true);
+                    if (!contentSet) {
+                        conn.setRequestProperty("Content-Type",
+                                "application/x-www-form-urlencoded; charset="
+                                        + CONTENT_CHARSET);
+                    } else if (contentType != null) {
+                        conn.setRequestProperty("Content-Type", contentType);
+                    }
+                    File file = new File(contentFilePath);
+                    if (file.exists() && !file.isDirectory()) {
+                        if (Build.VERSION.SDK_INT > 19) {
+                            conn.setFixedLengthStreamingMode((int) file.length());
+                        }
+                        else {
+                            conn.setFixedLengthStreamingMode((int) file.length());
+                        }
+
+                        FileInputStream fileInputStream = new FileInputStream(file);
+                        final OutputStream out = conn.getOutputStream();
+
+                        int len = 0;
+                        while ((len = fileInputStream.read(buffer)) != -1) {
+                            out.write(buffer, 0, len);
+                        }
+
+                        out.flush();
+                        fileInputStream.close();
+                    } else {
+                        conn.setFixedLengthStreamingMode(0);
+                    }
+                }
+            }
+
+                for (final HttpRequestHandler connHandler : reqHandlers) {
+                    try {
+                        connHandler.onRequest(conn);
+                    } catch (HttpClientException e) {
+                        throw e;
+                    } catch (Exception e) {
+                        throw new HttpClientException("Failed to prepare request to " + uri, e);
+                    }
+                }
+
+                conn.connect();
+
+                final int statusCode = conn.getResponseCode();
+                if (statusCode == -1) {
+                    throw new HttpClientException("Invalid response from " + uri);
+                }
+                
+                if (!expectedStatusCodes.isEmpty() && !expectedStatusCodes.contains(statusCode)) {
+                    throw new HttpClientException("Expected status code " + expectedStatusCodes
+                            + ", got "
+                            + statusCode);
+                } else if (expectedStatusCodes.isEmpty() && statusCode / 100 != 2) {
+                    throw new HttpClientException("Expected status code 2xx, got " + statusCode);
+                }
+
+                final Map<String, List<String>> headerFields = conn.getHeaderFields();
+                final Map<String, String> inMemoryCookies = hc.getInMemoryCookies();
+                if (headerFields != null) {
+                    final List<String> newCookies = headerFields.get("Set-Cookie");
+                    if (newCookies != null) {
+                        for (final String newCookie : newCookies) {
+                            final String rawCookie = newCookie.split(";", 2)[0];
+                            final int i = rawCookie.indexOf('=');
+                            final String name = rawCookie.substring(0, i);
+                            final String value = rawCookie.substring(i + 1);
+                            inMemoryCookies.put(name, value);
+                        }
+                    }
+                }
+
+                if (isStatusCodeError(statusCode)) {
+                    // Got an error: cannot read input.
+                    payloadStream = new UncloseableInputStream(getErrorStream(conn));
+                } else {
+                    payloadStream = new UncloseableInputStream(getInputStream(conn));
+                }
+                final HttpResponse resp = new HttpResponse(statusCode, payloadStream,
+                        headerFields == null ? NO_HEADERS : headerFields, inMemoryCookies);
+                if (handler != null) {
+                    try {
+                        handler.onSuccess(resp, conn.getResponseMessage());
+                    } catch (Exception e) {
+                        throw new HttpClientException("Error in response handler", e);
+                    }
+                } else {
+                    final File temp = File.createTempFile("httpclient-req-", ".cache", hc
+                            .getContext().getCacheDir());
+                    resp.preload(temp);
+                    temp.delete();
+                }
+                return resp;            
+        } catch (SocketTimeoutException e) {
+            if (handler != null) {
+                try {
+                    handler.onFailure(e);
+                    return null;
+                } catch (Exception e2) {
+                    throw new HttpClientException("Error in response handler", e2);
+                }
+            } else {
+                throw new HttpClientException("Response timeout from " + uri, e);
+            }
+        } catch (IOException e) {
+            throw new HttpClientException("Connection failed to " + uri, e);
+        } finally {
+            if (conn != null) {
+                if (payloadStream != null) {
+                    // Fully read Http response:
+                    // http://docs.oracle.com/javase/6/docs/technotes/guides/net/http-keepalive.html
+                    try {
+                        while (payloadStream.read(buffer) != -1) {
+                            ;
+                        }
+                    } catch (IOException ignore) {
+                    }
+                    payloadStream.forceClose();
+                }
+                conn.disconnect();
+            }
+        }
     }
 
     private static boolean isStatusCodeError(int sc) {
@@ -489,7 +726,8 @@ public final class HttpRequestBuilder {
     /**
      * Setup SSL connection.
      */
-    private static void setupSecureConnection(Context context, HttpsURLConnection conn) throws IOException {
+    private static void setupSecureConnection(Context context, HttpsURLConnection conn)
+            throws IOException {
         final SSLContext sslContext;
         try {
             // SSL certificates are provided by the Guardian Project:
@@ -502,7 +740,9 @@ public final class HttpRequestBuilder {
                 final KeyStore keyStore = loadCertificates(context);
 
                 final CustomTrustManager customTrustManager = new CustomTrustManager(keyStore);
-                trustManagers = new TrustManager[] { customTrustManager };
+                trustManagers = new TrustManager[] {
+                        customTrustManager
+                };
             }
 
             // Init SSL connection with custom certificates.
@@ -524,7 +764,8 @@ public final class HttpRequestBuilder {
             final SSLSocketFactory delegate = sslContext.getSocketFactory();
             final SSLSocketFactory socketFactory = new SSLSocketFactory() {
                 @Override
-                public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+                public Socket createSocket(String host, int port) throws IOException,
+                        UnknownHostException {
                     InetAddress addr = InetAddress.getByName(host);
                     injectHostname(addr, host);
                     return delegate.createSocket(addr, port);
@@ -536,7 +777,8 @@ public final class HttpRequestBuilder {
                 }
 
                 @Override
-                public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+                public Socket createSocket(String host, int port, InetAddress localHost,
+                        int localPort)
                         throws IOException, UnknownHostException {
                     return delegate.createSocket(host, port, localHost, localPort);
                 }
