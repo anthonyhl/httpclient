@@ -15,19 +15,17 @@
  */
 package org.pixmob.httpclient;
 
-import android.content.Context;
-import android.os.Build;
-
-import com.google.inject.Inject;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.pixmob.httpclient.Constants.HTTP_DELETE;
 import static org.pixmob.httpclient.Constants.HTTP_GET;
 import static org.pixmob.httpclient.Constants.HTTP_HEAD;
 import static org.pixmob.httpclient.Constants.HTTP_POST;
 import static org.pixmob.httpclient.Constants.HTTP_PUT;
+
+import android.content.Context;
+import android.os.Build;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The Http client is responsible for sending Http requests.

@@ -17,6 +17,7 @@ package org.pixmob.httpclient;
 
 import android.os.Build;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -107,13 +108,41 @@ public final class HttpResponse {
 
     void preload(File temp) throws IOException {
         final FileOutputStream out = new FileOutputStream(temp);
-        final byte[] inBuf = new byte[1024];
         final InputStream in = getPayload();
-        for (int bytesRead = 0; (bytesRead = in.read(inBuf)) != -1;) {
-            out.write(inBuf, 0, bytesRead);
+        try {
+            final byte[] inBuf = new byte[1024];            
+            for (int bytesRead = 0; (bytesRead = in.read(inBuf)) != -1;) {
+                out.write(inBuf, 0, bytesRead);
+            }
+        } finally {
+            out.close();
+            in.close();
         }
 
         payload = new FileInputStream(temp);
+    }
+
+    public String getResponseBody() throws IOException {
+        String enc = getContentCharset();
+        if (enc == null) {
+            enc = "UTF-8";
+        }
+
+        InputStream input = getPayload();
+        InputStreamReader inputStreamReader = new InputStreamReader(input, enc);
+        BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+
+        StringBuilder stringBuilder = new StringBuilder();
+        String bufferedStrChunk = null;
+
+        while((bufferedStrChunk = bufferedReader.readLine()) != null){
+            stringBuilder.append(bufferedStrChunk);
+        }
+
+        if (bufferedReader != null) { bufferedReader.close(); }
+        if (inputStreamReader != null) { inputStreamReader.close(); }
+
+        return stringBuilder.toString();
     }
 
     public void read(StringBuilder buffer) throws IOException {
